@@ -32,10 +32,7 @@ DATA_NUM = DEMENTIA_NUM + CONTROL_NUM
 FEATURE_TYPE = ['Syntactic', 'Semantic', 'Syntactic_Semantic']
 
 # Pos-tag type for Ckip Segmenter
-noun_set = ('Na', 'Nb', 'Nc', 'Ncd', 'Nd', 'Neu', 'Neqa', 'Neqb', 'Nf', 'Ng', 'Nv')
-pronoun_set = ('Nh', 'Nep')
-verb_set = ('VA', 'VAC', 'VB', 'VC', 'VCL', 'VD', 'VE', 'VF', 'VG', 'VH', 'VHC', 'VI', 'VJ', 'VK', 'VL', 'V_2')
-a_set = ('A')
+
 segmenter = ckip.CkipSegmenter()
 
 class Cluster:
@@ -60,30 +57,64 @@ class Cluster:
         	openCC = OpenCC('tw2s')
         	sentence = openCC.convert(sentence) 
         	word_pos = pseg.cut(sentence)
-        elif segment_tool=='ckip':
-        	word_pos = segmenter.seg(sentence)
-        	word_pos = word_pos.res
-        
-        tmp_n, tmp_v, tmp_a, tmp_r, tmp_token = 0.0, 0.0, 0.0, 0.0, 0.0
-        word_type = collections.Counter()
-        for word, flag in word_pos:
-            word_type[word] += 1
-            tmp_token += 1
-            if flag[0] == 'n':
-                tmp_n += 1
-            elif flag[0] == 'v':
-                tmp_v += 1
-            elif flag[0] == 'a':
-                tmp_a += 1
-            elif flag[0] == 'r':
-                tmp_r += 1
+	        tmp_n, tmp_v, tmp_a, tmp_r, tmp_token = 0.0, 0.0, 0.0, 0.0, 0.0
+        	word_type = collections.Counter()
+	        for word, flag in word_pos:
+	            word_type[word] += 1
+	            tmp_token += 1
+	            if flag[0] == 'n':
+	                tmp_n += 1
+	            elif flag[0] == 'v':
+	                tmp_v += 1
+	            elif flag[0] == 'a':
+	                tmp_a += 1
+	            elif flag[0] == 'r':
+	                tmp_r += 1
         return [tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token, len(word_type)/tmp_token]
 
     def syntactic_extract(self, segment_tool='jieba'):
     	self.syntactic_feature = []
-    	for key, s in self.sentence_dict.items():
-    		pos_tag_result = self.pos_tag_analysis(s, segment_tool)
-    		self.syntactic_feature.append(pos_tag_result)
+    	
+    	if segment_tool=='jieba':
+	    	for key, s in self.sentence_dict.items():
+	    		pos_tag_result = self.pos_tag_analysis(s, segment_tool)
+	    		self.syntactic_feature.append(pos_tag_result)
+    	elif segment_tool=='ckip':
+            with open('../pickle/ckip_seg_result.pickle', 'rb') as f:
+                ck_result = pickle.load(f)
+            for word_pos in ck_result:
+                tmp_na, tmp_d, tmp_va, tmp_vk, tmp_vh, tmp_vcl, tmp_dfa, tmp_nh, tmp_cbb, tmp_vj, tmp_ng, tmp_v2, tmp_token = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+                word_type = collections.Counter()
+                for word, flag in word_pos:
+                    word_type[word] += 1
+                    tmp_token += 1
+                    if flag == 'Na':
+                        tmp_na += 1
+                    elif flag =='D':
+                        tmp_d += 1
+                    elif flag == 'VA':
+                        tmp_va += 1
+                    elif flag == 'VK':
+                        tmp_vk += 1
+                    elif flag == 'VH':
+                        tmp_vh += 1
+                    elif flag == 'VCL':
+                        tmp_vcl += 1
+                    elif flag == 'Dfa':
+                        tmp_dfa += 1
+                    elif flag == 'Nh':
+                        tmp_nh += 1
+                    elif flag == 'Cbb':
+                        tmp_cbb += 1
+                    elif flag == 'VJ':
+                        tmp_vj += 1
+                    elif flag == 'Ng':
+                        tmp_ng += 1
+                    elif flag == 'V_2':
+                        tmp_v2 += 1
+                self.syntactic_feature.append([tmp_na/tmp_token, tmp_d/tmp_token, tmp_va/tmp_token, tmp_vk/tmp_token, 
+                         tmp_vh/tmp_token, tmp_vcl/tmp_token, tmp_dfa/tmp_token, tmp_nh/tmp_token, 
+                         tmp_cbb/tmp_token, tmp_vj/tmp_token, tmp_ng/tmp_token, tmp_v2/tmp_token])
     	print('Syntactic features extract success...')
 
     def write_syntactic_feature(self, file_name):
@@ -175,25 +206,25 @@ if __name__ == '__main__':
     test_cluster.evaluate('Semantic')
     test_cluster.evaluate('Syntactic_Semantic')
 
-    # print('Start Scenario 2, Kmean Clustering with semi-labeled data\nUsing ckip syntactic, ckip semantic features ...')
-    
-    # test_cluster.syntactic_extract('ckip')
-    # test_cluster.load_sentence_vector("s2v_array_zht_500dim.pickle")
-    # test_cluster.evaluate('Syntactic')
-    # test_cluster.evaluate('Semantic')
-    # test_cluster.evaluate('Syntactic_Semantic')
+    print('Start Scenario 2, Kmean Clustering with semi-labeled data\nUsing ckip syntactic, ckip semantic features ...')
+    test_cluster2 = Cluster()
+    test_cluster2.syntactic_extract('ckip')
+    test_cluster2.load_sentence_vector("s2v_array_zht_500dim.pickle")
+    test_cluster2.evaluate('Syntactic')
+    test_cluster2.evaluate('Semantic')
+    test_cluster2.evaluate('Syntactic_Semantic')
 
     print('Start Scenario 3, Kmean Clustering with semi-labeled data\nUsing jieba syntactic, ckip semantic features ...')
-
-    test_cluster.syntactic_extract('jieba')
-    test_cluster.load_sentence_vector('s2v_array_zht_500dim.pickle')
-    test_cluster.evaluate('Syntactic_Semantic')
+    test_cluster3 = Cluster()
+    test_cluster3.syntactic_extract('jieba')
+    test_cluster3.load_sentence_vector('s2v_array_zht_500dim.pickle')
+    test_cluster3.evaluate('Syntactic_Semantic')
 
     print('Start Scenario 4, Kmean Clustering with semi-labeled data\nUsing ckip syntactic, jieba semantic features ...')
-
-    test_cluster.syntactic_extract('ckip')
-    test_cluster.load_sentence_vector('s2v_array_zhs_500dim.pickle')
-    test_cluster.evaluate('Syntactic_Semantic')
+    test_cluster4 = Cluster()
+    test_cluster4.syntactic_extract('ckip')
+    test_cluster4.load_sentence_vector('s2v_array_zhs_500dim.pickle')
+    test_cluster4.evaluate('Syntactic_Semantic')
 
     # predict_sentence = "媽媽在洗碗時候洗手台的水流出來了，有兩個小孩在櫥櫃旁邊，男孩正站在椅子上要去拿餅乾，女孩在椅子旁伸手跟男孩要餅乾。"
     # test_cluster.predict_sentence(predict_sentence)

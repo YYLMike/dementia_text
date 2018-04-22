@@ -60,30 +60,46 @@ class Cluster:
         	openCC = OpenCC('tw2s')
         	sentence = openCC.convert(sentence) 
         	word_pos = pseg.cut(sentence)
-        elif segment_tool=='ckip':
-        	word_pos = segmenter.seg(sentence)
-        	word_pos = word_pos.res
-        
-        tmp_n, tmp_v, tmp_a, tmp_r, tmp_token = 0.0, 0.0, 0.0, 0.0, 0.0
-        word_type = collections.Counter()
-        for word, flag in word_pos:
-            word_type[word] += 1
-            tmp_token += 1
-            if flag[0] == 'n':
-                tmp_n += 1
-            elif flag[0] == 'v':
-                tmp_v += 1
-            elif flag[0] == 'a':
-                tmp_a += 1
-            elif flag[0] == 'r':
-                tmp_r += 1
+	        tmp_n, tmp_v, tmp_a, tmp_r, tmp_token = 0.0, 0.0, 0.0, 0.0, 0.0
+        	word_type = collections.Counter()
+	        for word, flag in word_pos:
+	            word_type[word] += 1
+	            tmp_token += 1
+	            if flag[0] == 'n':
+	                tmp_n += 1
+	            elif flag[0] == 'v':
+	                tmp_v += 1
+	            elif flag[0] == 'a':
+	                tmp_a += 1
+	            elif flag[0] == 'r':
+	                tmp_r += 1
         return [tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token, len(word_type)/tmp_token]
 
     def syntactic_extract(self, segment_tool='jieba'):
     	self.syntactic_feature = []
-    	for key, s in self.sentence_dict.items():
-    		pos_tag_result = self.pos_tag_analysis(s, segment_tool)
-    		self.syntactic_feature.append(pos_tag_result)
+    	
+    	if segment_tool=='jieba':
+	    	for key, s in self.sentence_dict.items():
+	    		pos_tag_result = self.pos_tag_analysis(s, segment_tool)
+	    		self.syntactic_feature.append(pos_tag_result)
+    	elif segment_tool=='ckip':
+    		with open('../pickle/ckip_seg_result.pickle', 'rb') as f:
+    			ck_result = pickle.load(f)
+    		for word_pos in ck_result:
+    			tmp_n, tmp_v, tmp_a, tmp_r, tmp_token = 0.0, 0.0, 0.0, 0.0, 0.0
+    			word_type = collections.Counter()
+    			for word, flag in word_pos:
+    				word_type[word] += 1
+    				tmp_token += 1
+    				if flag[0] in noun_set:
+    					tmp_n += 1
+    				elif flag[0] in verb_set:
+    					tmp_v += 1
+    				elif flag[0] in a_set:
+    					tmp_a += 1
+    				elif flag[0] in pronoun_set:
+    					tmp_r += 1
+    			self.syntactic_feature.append([tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token, len(word_type)/tmp_token])
     	print('Syntactic features extract success...')
 
     def write_syntactic_feature(self, file_name):
@@ -124,7 +140,7 @@ class Cluster:
         print('Kmean and PCA success...')
        	return kmeans, score_2d
 
-    def evaluate(self, feature_mode='Syntactic'):
+    def evaluate(self, feature_mode='Syntactic', result_name=None):
         self.kmeans_cluster, self.pca_labels = self.k_mean_cluster(feature_mode)
         dementia = self.kmeans_cluster.labels_[:DEMENTIA_NUM]
         control = self.kmeans_cluster.labels_[DEMENTIA_NUM:]
@@ -136,14 +152,28 @@ class Cluster:
         tn = np.asarray(np.where(dementia!=control_target)).flatten()
         fp = np.asarray(np.where(dementia==control_target)).flatten()
         fn = np.asarray(np.where(control!=control_target)).flatten()
+
         print(str(feature_mode) + " features evaluation results.")
         print("True Positve: {0}\nFalse Positve: {1}\nTrue Negative: {2}\nFalse Negative: {3}\n"\
         	.format(len(tp), len(fp), len(tn), len(fn)))
+        print('False Positive: {}'.format(fp))
+        print('False Negative: {}'.format(fn))
         accuracy = (len(tp) + len(tn)) / DATA_NUM
         precision = len(tp)/(len(tp)+len(fp))
         recall = len(tp)/(len(tp)+len(fn))
         print("Accuracy :{0}\nPrecision: {1}\nRecall: {2}\n".format(accuracy, precision, recall))
-        return accuracy
+
+        result_dict = {}
+        result_dict['tp'] = tp
+        result_dict['fp'] = fp
+        result_dict['tn'] = tn
+        result_dict['fn'] = fn
+
+        if result_name:
+	        with open(result_name, 'wb') as f:
+	        	pickle.dump(result_dict, f)
+
+        return accuracy, result_dict
 
     def plot_cluster(self):
         plt.figure()
@@ -165,35 +195,34 @@ class Cluster:
 
 if __name__ == '__main__':
     
-    test_cluster = Cluster()
-    
-    print('Start Scenario 1, Kmean Clustering with semi-labeled data\nUsing jieba syntactic, jieba semantic features ...')
 
+    print('Start Scenario 1, Kmean Clustering with semi-labeled data\nUsing jieba syntactic, jieba semantic features ...')
+    test_cluster = Cluster()
     test_cluster.syntactic_extract('jieba')
     test_cluster.load_sentence_vector("s2v_array_zhs_500dim.pickle")
-    test_cluster.evaluate('Syntactic')
-    test_cluster.evaluate('Semantic')
-    test_cluster.evaluate('Syntactic_Semantic')
+    _, result_1_syntactic = test_cluster.evaluate('Syntactic', 'result_1_syntactic.pickle')
+    _, result_1_semantic = test_cluster.evaluate('Semantic', 'result_1_semantic.pickle')
+    _, result_1_both = test_cluster.evaluate('Syntactic_Semantic', 'result_1_both.pickle')
 
-    # print('Start Scenario 2, Kmean Clustering with semi-labeled data\nUsing ckip syntactic, ckip semantic features ...')
-    
-    # test_cluster.syntactic_extract('ckip')
-    # test_cluster.load_sentence_vector("s2v_array_zht_500dim.pickle")
-    # test_cluster.evaluate('Syntactic')
-    # test_cluster.evaluate('Semantic')
-    # test_cluster.evaluate('Syntactic_Semantic')
+    print('Start Scenario 2, Kmean Clustering with semi-labeled data\nUsing ckip syntactic, ckip semantic features ...')
+    test_cluster2 = Cluster()
+    test_cluster2.syntactic_extract('ckip')
+    test_cluster2.load_sentence_vector("s2v_array_zht_500dim.pickle")
+    _, result_2_syntactic = test_cluster2.evaluate('Syntactic', 'result_2_syntactic.pickle')
+    _, result_2_semantic = test_cluster2.evaluate('Semantic', 'result_2_semantic.pickle')
+    _, result_2_both = test_cluster2.evaluate('Syntactic_Semantic', 'result_2_both.pickle')
 
     print('Start Scenario 3, Kmean Clustering with semi-labeled data\nUsing jieba syntactic, ckip semantic features ...')
-
-    test_cluster.syntactic_extract('jieba')
-    test_cluster.load_sentence_vector('s2v_array_zht_500dim.pickle')
-    test_cluster.evaluate('Syntactic_Semantic')
+    test_cluster3 = Cluster()
+    test_cluster3.syntactic_extract('jieba')
+    test_cluster3.load_sentence_vector('s2v_array_zht_500dim.pickle')
+    _, result_3_both = test_cluster3.evaluate('Syntactic_Semantic', 'result_3_both.pickle')
 
     print('Start Scenario 4, Kmean Clustering with semi-labeled data\nUsing ckip syntactic, jieba semantic features ...')
-
-    test_cluster.syntactic_extract('ckip')
-    test_cluster.load_sentence_vector('s2v_array_zhs_500dim.pickle')
-    test_cluster.evaluate('Syntactic_Semantic')
+    test_cluster4 = Cluster()
+    test_cluster4.syntactic_extract('ckip')
+    test_cluster4.load_sentence_vector('s2v_array_zhs_500dim.pickle')
+    _, result_4_both = test_cluster4.evaluate('Syntactic_Semantic', 'result_4_both.pickle')
 
     # predict_sentence = "媽媽在洗碗時候洗手台的水流出來了，有兩個小孩在櫥櫃旁邊，男孩正站在椅子上要去拿餅乾，女孩在椅子旁伸手跟男孩要餅乾。"
     # test_cluster.predict_sentence(predict_sentence)
