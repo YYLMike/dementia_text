@@ -1,63 +1,80 @@
 import jieba.posseg as pseg
-import jieba
+import ckip
 import collections
-import gensim
-import numpy as np
-WORDVEC_MODEL = '../wordvec_model/'
-WV_DIIM = 500
-def load_wordvec_model(file_name):
-	w2v_model = gensim.models.Word2Vec.load(WORDVEC_MODEL+file_name)
-	words = []
-	for word in w2v_model.wv.vocab:
-		words.append(word)
-	print('Load word2vec model sucess ...')
-	print('Number of token: {}'.format(len(words)))
-	print('Dimensions of word vector: {}'.format(len(w2v_model[words[0]])))
-	return w2v_model
+from opencc import OpenCC
 
-def pos_tag_analysis(sentence, segment_tool): # segment_tool, 0:jieba, 1: Ckip
-    if segment_tool=='jieba':
-    	word_pos = pseg.cut(sentence)
-    # elif segment_tool=='ckip':
-    # 	segmenter = ckip.CKIP()
-    # 	word_pos = segmenter.Segment(sentence)
-    # 	word_pos = word_pos.res
-    
-    tmp_n, tmp_v, tmp_a, tmp_r, tmp_token = 0.0, 0.0, 0.0, 0.0, 0.0
-    word_type = collections.Counter()
-    for word, flag in word_pos:
-        word_type[word] += 1
-        tmp_token += 1
-        if flag[0] == 'n':
-            tmp_n += 1
-        elif flag[0] == 'v':
-            tmp_v += 1
-        elif flag[0] == 'a':
-            tmp_a += 1
-        elif flag[0] == 'r':
-            tmp_r += 1
-    return [tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token, len(word_type)/tmp_token]
+# Pos-tag type for Ckip Segmenter
+noun_set = ('Na', 'Nb', 'Nc', 'Ncd', 'Nd', 'Neu',
+            'Neqa', 'Neqb', 'Nf', 'Ng', 'Nv', 'n')
+pronoun_set = ('Nh', 'Nep', 'r')
+verb_set = ('VA', 'VAC', 'VB', 'VC', 'VCL', 'VD', 'VE', 'VF',
+            'VG', 'VH', 'VHC', 'VI', 'VJ', 'VK', 'VL', 'V_2', 'v')
+a_set = ('A', 'a')
 
-def semantic_analysis(sentence, w2v_model, zh_type='s'):
 
-	vector = np.zeros((WV_DIIM))
-	oov_num = 0
-	# w2v_model = load_wordvec_model(WORDVEC_MODEL+'700features_20context_20mincount_zht')
-	if zh_type=='s':
-		# openCC = OpenCC('tw2s')
-		# sentence = openCC.convert(sentence)
-		token_sentence = jieba.lcut(sentence)
-		# token_sentence = [t for t in token_sentence if not t in exclude]
-	
-	# elif zh_type=='tw':
-	# 	segmenter = ckip.CkipSegmenter()
-	# 	token_sentence = segmenter.seg(sentence)
-	# 	token_sentence = [t for t in token_sentence.tok if not t in exclude]
+class Postag_analysis:
 
-	for token in token_sentence:
-		if token in w2v_model.wv.vocab:
-			vector += w2v_model[token]
-		else:
-			oov_num += 1
-	vector /= len(token_sentence)
-	return vector
+    def __init__(self):
+
+        self.segmenter = ckip.CkipSegmenter()
+        self.syntactic_features_jieba = []
+        self.syntactic_features_ckip = []
+
+    def pos_tag_analysis(self, sentence, segment_tool):  # segment_tool, 0:jieba, 1: Ckip
+
+        tmp_n, tmp_v, tmp_a, tmp_r, tmp_token = 0.0, 0.0, 0.0, 0.0, 0.0
+        word_type = collections.Counter()
+
+        if segment_tool == 'jieba':
+            openCC = OpenCC('tw2s')
+            sentence_s = openCC.convert(sentence)
+            word_pos = pseg.cut(sentence_s)
+
+        elif segment_tool == 'ckip':
+            word_pos = self.segmenter.seg(sentence)
+            word_pos = word_pos.res
+
+        for word, flag in word_pos:
+            word_type[word] += 1
+            # print(word+flag, end=', ')
+            tmp_token += 1
+            if flag in noun_set:
+                tmp_n += 1
+            elif flag in verb_set:
+                tmp_v += 1
+            elif flag in a_set:
+                tmp_a += 1
+            elif flag in pronoun_set:
+                tmp_r += 1
+        if segment_tool == 'jieba':
+            self.syntactic_features_jieba.append([tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token, len(word_type)/tmp_token])
+        elif segment_tool == 'ckip':
+            self.syntactic_features_ckip.append([tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token, len(word_type)/tmp_token])
+        
+        return [tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token, len(word_type)/tmp_token]
+
+    def main():
+        test_postag_analysis = Postag_analysis()
+
+        test_sentence = '這個孩子拿了個東西放到上面，有一個流水台，這是他的家庭主婦，這是他的兒子。'
+        postag_jieba = test_postag_analysis.pos_tag_analysis(
+            test_sentence, 'jieba')
+        print('*'*100)
+        postag_ckip = test_postag_analysis.pos_tag_analysis(
+            test_sentence, 'ckip')
+        print(postag_jieba)
+        print(postag_ckip)
+
+        test_sentence = '這個小姐在洗碗，手裡拿了個盤子，這個小孩在偷點心吃，這個凳子快要翻了，這個小女孩在指責他 ，這個洗碗的盆子的水已經滿了都流出來了，這個窗外面有樹木，這也是窗外面的景色，這是一個櫥櫃。'
+        postag_jieba = test_postag_analysis.pos_tag_analysis(
+            test_sentence, 'jieba')
+        print('*'*100)
+        postag_ckip = test_postag_analysis.pos_tag_analysis(
+            test_sentence, 'ckip')
+        print(postag_jieba)
+        print(postag_ckip)
+        print('*'*100)
+        print(test_postag_analysis.syntactic_features)
+
+if __name__ == '__main__':
+    Postag_analysis.main()
