@@ -15,6 +15,7 @@ import jieba
 
 JIEBA_DICT = '../data/dict.txt.big'
 SEG_CORPUS = '../data/'
+jieba.set_dictionary(JIEBA_DICT)
 # Segment the corpus text file, this will take a while
 def corpus_to_segment_list(corpus):
     file_write = open(SEG_CORPUS+'seg_wiki.zht.txt', 'w')

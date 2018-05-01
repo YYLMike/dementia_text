@@ -1,5 +1,9 @@
 # Dementia
 
+git push https://github.com/YYLMike/Dementia.git
+User name: YYLMike
+User pwd: lkklkk123
+
 file list: wikiXMLtoTXT.py, train_word2vec_model.py, data_preprocess.py, postag_ver*.py
 
 Section 1: Word Embedding
