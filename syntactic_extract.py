@@ -11,7 +11,6 @@ verb_set = ('VA', 'VAC', 'VB', 'VC', 'VCL', 'VD', 'VE', 'VF',
             'VG', 'VH', 'VHC', 'VI', 'VJ', 'VK', 'VL', 'V_2', 'v')
 a_set = ('A', 'a')
 
-
 class Postag_analysis:
 
     def __init__(self):
