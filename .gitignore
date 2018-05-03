@@ -1,2 +1,10 @@
 *.pickle
 *.csv
+/runs
+/runs_2
+*.pyc
+/classify_result_pkl
+/cluster_result_pkl
+/jupyter_notebook/runs
+/jupyter_notebook/runs_2
+/jupyter_notebook/*.txt
