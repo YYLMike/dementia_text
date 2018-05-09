@@ -21,3 +21,10 @@ Syntacitc feature extract by using postag, semantic feature extract by sentence 
 Using K-mean cluster on control and dementia data
 Plot scatter of the result
 Predicting a unknown sentence is dementia or not by k-mean precit function
+
+Section 4: CNN text mining, 
+Using CNN on text raw data with three filter_size (3,4,5) and each has 128 filters to extract feature automaticly.
+Classification layer is also connect on the last layer using softmax cross entropy.
+Two types of embedding layer is used: one hot encoding and pretrained word2vec model.
+Training step is using one-of-ten cross validation
+Test step is using 5 of each class, i.e. 5 control& 5 dementia
