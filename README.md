@@ -1,6 +1,6 @@
 # Dementia
 
-git push https://github.com/YYLMike/Dementia.git
+git push https://github.com/YYLMike/dementia_text.git
 User name: YYLMike
 User pwd: lkklkk123
 
