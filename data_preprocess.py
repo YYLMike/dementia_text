@@ -1,13 +1,17 @@
 # import modules
-import pandas as pd
 import pickle
-import gensim
-import numpy as np
 import string
-from opencc import OpenCC
+
 import ckip
+import gensim
 import jieba
+import jieba.posseg as pseg
+import numpy as np
+from opencc import OpenCC
+
+import pandas as pd
 import tensorflow as tf
+
 # Path of files
 CSV_DATA = '../data/CookieTheft_51.csv'
 DEMENTIA_DATA = '../data/'
@@ -87,6 +91,17 @@ def read_sentence(file_name_ad=None, file_name_ctrl=None):
     print('sentence number of control normal subject: {}'.format(len(control_labels)))
     return train_data, train_labels
 
+# y label from two dim to one dim
+
+
+def label_to_scalar(y):
+    y_scalar = []
+    for i in y:
+        if i[0] == 1:
+            y_scalar.append(0)
+        elif i[1] == 1:
+            y_scalar.append(1)
+    return y_scalar
 # segment sentence into token list
 
 
@@ -96,6 +111,14 @@ def segmentation(train_data):
         train_data_seg.append(' '.join(jieba.lcut(i)))
     return train_data_seg
 
+# segment sentence into token along with postagger
+
+
+def segmentation_postagger(train_data):
+    train_data_seg = []
+    for i in train_data:
+        train_data_seg.append(pseg.lcut(i))
+    return train_data_seg
 # split paragrpah to sentence by punctuation
 
 
@@ -128,63 +151,6 @@ def load_wordvec_model(file_name):
     print('Number of token: {}'.format(len(words)))
     print('Dimensions of word vector: {}'.format(len(w2v_model[words[0]])))
     return w2v_model, word_embedding, word_dict
-
-# sentence to sequence by onehot encoding
-
-
-def text_to_onehot(train_data_seg):
-    # max_sentence_length = max([len(x.split(' ')) for x in train_data_seg])
-    max_sentence_length = 17
-    print('Max token number of sentence: {}'.format(max_sentence_length))
-    vocab_processor = tf.contrib.learn.preprocessing.VocabularyProcessor(
-        max_sentence_length)
-    x_onehot = np.array(list(vocab_processor.fit_transform(train_data_seg)))
-    x_onehot = np.asarray(train_data_seg_encoded, dtype=np.int32)
-    print('Sample of x_onehot: {}'.format(x_onehot[-1]))
-    print('Vocabulary size: {}'.format(len(vocab_processor.vocabulary_)))
-
-    return x_onehot, vocab_processor
-
-
-def text_to_onehot_w2v(train_data_seg, vocab):
-    # max_sentence_length = max([len(x.split(' ')) for x in train_data_seg])
-    max_sentence_length = 17
-    print('Max token number of sentence: {}'.format(max_sentence_length))
-    vocab_processor = tf.contrib.learn.preprocessing.VocabularyProcessor(
-        max_sentence_length)
-    vocab_processor.fit(vocab)
-    x_onehot_w2v = np.array(list(vocab_processor.transform(train_data_seg)))
-    print('Sample of x_onehot_w2v: {}'.format(x_onehot_w2v[-1]))
-    print('Vocabulary size: {}'.format(len(vocab_processor.vocabulary_)))
-    return x_onehot_w2v, vocab_processor
-
-
-def cross_validate_data(data_train, data_label):
-    dev_sample_index = -1 * int(.1*float(len(data_label)))
-    x_train, x_dev = data_train[:dev_sample_index], data_train[dev_sample_index:]
-    y_train, y_dev = data_label[:dev_sample_index], data_label[dev_sample_index:]
-    print('Train/Dev split : {}/{}'.format(len(y_train), len(y_dev)))
-    return x_train, x_dev, y_train, y_dev
-
-
-def batch_iter(data, batch_size, num_epochs, shuffle=True):
-    """
-    Generates a batch iterator for a dataset.
-    """
-    data = np.array(data)
-    data_size = len(data)
-    num_batches_per_epoch = int((len(data)-1)/batch_size) + 1
-    for epoch in range(num_epochs):
-        # Shuffle the data at each epoch
-        if shuffle:
-            shuffle_indices = np.random.permutation(np.arange(data_size))
-            shuffled_data = data[shuffle_indices]
-        else:
-            shuffled_data = data
-        for batch_num in range(num_batches_per_epoch):
-            start_index = batch_num * batch_size
-            end_index = min((batch_num + 1) * batch_size, data_size)
-            yield shuffled_data[start_index:end_index]
 
 
 if __name__ == '__main__':
