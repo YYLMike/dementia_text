@@ -101,7 +101,7 @@ def label_to_scalar(y):
             y_scalar.append(0)
         elif i[1] == 1:
             y_scalar.append(1)
-    return y_scalar
+    return np.array(y_scalar)
 # segment sentence into token list
 
 
