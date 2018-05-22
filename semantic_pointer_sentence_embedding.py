@@ -1,5 +1,6 @@
 # import-module
 import sys
+import matplotlib.pyplot as plt
 
 import jieba.posseg as pseg
 import nengo
@@ -15,17 +16,19 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 
 from tensorflow.python.keras import optimizers
-from tensorflow.python.keras.layers import LSTM, Dense
+from tensorflow.python.keras.layers import LSTM, Dense, Dropout
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.preprocessing.sequence import pad_sequences
 from tensorflow.python.keras.preprocessing.text import Tokenizer
+from sklearn.metrics import roc_auc_score, auc, roc_curve
+from sklearn.cross_validation import StratifiedKFold
 
 import data_preprocess
 import tokenize_data_helper
 
-DIM = 100
+DIM = 500
 TRAIN_NUM_WORDS = 1000
-W2V_MODEL = '100features_20context_20mincount_zht'
+W2V_MODEL = '500features_20context_20mincount_zht'
 CONTROL_TRAIN = 'control.txt'
 DEMENTIA_TRAIN = 'dementia.txt'
 CONTROL_TEST = 'control_test.txt'
@@ -91,38 +94,24 @@ class SP_sentence_embed:
         for i in self.flag_dict:
             self.vocab.parse(i.upper())
 
-    # def sentence_sp(self, sentence):
-    #     sentence_bind_pos = []
-    #     for s in self.x_train_seg_pos:
-    #         new_s = self.vocab['Start']
-    #         for word, flag in s:
-    #             new_token = self.vocab['V' +
-    #                                    str(word)] * self.vocab[flag.upper()]
-    #             new_s += new_token
-    #         sentence_bind_pos.append(new_s.v/len(s))  # normalize
-    #     self.x_train_sp = np.zeros((len(self.x_train), DIM))
-    #     for i in range(len(sentence_bind_pos)):
-    #         self.x_train_sp[i] = sentence_bind_pos[i]
-    #     print('sentence embedding using semantic pointer architecture ...')
-    
     def sentence2sp(self, sentence_seg_pos):
         sentence_sp = None
         new_s = self.vocab['Start']
         for word, flag in sentence_seg_pos:
             new_token = self.vocab['V' + str(word)] * self.vocab[flag.upper()]
             new_s += new_token
-        sentence_sp = new_s.v/len(sentence_seg_pos)
+        sentence_sp = new_s.v/(len(sentence_seg_pos)+1)
         return sentence_sp
-    
+
     def get_train_sentence_sp(self):
         self.x_train_sp = np.zeros((len(self.x_train_seg_pos), DIM))
-        for i,s in enumerate(self.x_train_seg_pos):
+        for i, s in enumerate(self.x_train_seg_pos):
             self.x_train_sp[i] = self.sentence2sp(s)
         print('get train data sentence embedding: {}'.format(len(self.x_train_sp)))
-    
+
     def get_test_sentnece_sp(self):
         self.x_test_sp = np.zeros((len(self.x_test_seg_pos), DIM))
-        for i,s in enumerate(self.x_test_seg_pos):
+        for i, s in enumerate(self.x_test_seg_pos):
             self.x_test_sp[i] = self.sentence2sp(s)
         print('get test sentence embedding: {}'.format(len(self.x_test_sp)))
 
@@ -133,7 +122,7 @@ class SP_sentence_embed:
         logistic = LogisticRegression()
         svm_classifier = SVC()
         knn = KNeighborsClassifier(n_neighbors=10)
-        
+
         ml_method_name = ['decision_tree', 'random forest',
                           'logidtic regression', 'svm', 'knn']
         ml_method = (decision_tree, forest, logistic,
@@ -143,27 +132,76 @@ class SP_sentence_embed:
             scores = cross_validate(
                 i, self.x_train_sp, self.y_train_scalar, cv=10, scoring=scoring, return_train_score=True)
             for k in scores.keys():
-                print(str(n) + str(k) + '\nscore: {}'.format(np.mean(scores[k])))
+                print(str(n) + str(k) +
+                      '\nscore: {}'.format(np.mean(scores[k])))
             print('-'*10)
             i.fit(self.x_train_sp, self.y_train_scalar)
             print(i.predict(self.x_test_sp))
-            print('Test score: {}'.format(i.score(self.x_test_sp, self.y_test_scalar)))
+            print('Test score: {}'.format(
+                i.score(self.x_test_sp, self.y_test_scalar)))
             print('-'*30)
-    
+        return decision_tree
+
     def nn_model(self):
-        self.model = Sequential()
-        layer_dim = [256, 16, 1]# 256 32 1
-        self.model.add(Dense(layer_dim[0], input_dim=DIM, activation='relu'))
-        self.model.add(Dense(layer_dim[1], activation='relu'))
-        self.model.add(Dense(layer_dim[2], activation='sigmoid'))
+        model = Sequential()
+        layer_dim = [250, 50, 1]  # 256 32 1
+        model.add(Dense(layer_dim[0], input_dim=DIM, activation='relu'))
+        model.add(Dropout(rate=0.8))
+        model.add(Dense(layer_dim[1], activation='relu'))
+        model.add(Dropout(rate=0.8))
+        model.add(Dense(layer_dim[2], activation='sigmoid'))
         optimizer = optimizers.Adam()
-        self.model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
-        self.model.fit(self.x_train_sp, self.y_train_scalar, validation_split=0.1, epochs=50, batch_size=32, shuffle='True')
-    
+        model.compile(optimizer=optimizer,
+                      loss='binary_crossentropy', metrics=['accuracy'])
+        return model
+
+    def k_cross_val(self):
+
+        skf = StratifiedKFold(self.y_train_scalar, n_folds=5, shuffle=True)
+
+        best_model = None
+        last_acc = 0
+        for i, (train, val) in enumerate(skf):
+            print('Running fold: ', str(i+1))
+            model = self.nn_model()
+            model.fit(self.x_train_sp[train], self.y_train_scalar[train],
+                        epochs=30, batch_size=16, shuffle='True', verbose=2)
+            result = model.evaluate(
+                self.x_train_sp[val], self.y_train_scalar[val])
+            print('Validation acc: {}'.format(result[1]))
+            if result[1] > last_acc:
+                best_model = model
+            last_acc = result[1]
+        return best_model
+
 if __name__ == '__main__':
     test_sp_s2v = SP_sentence_embed()
     test_sp_s2v.vocab_create()
     test_sp_s2v.get_train_sentence_sp()
     test_sp_s2v.get_test_sentnece_sp()
-    test_sp_s2v.evaluate_with_ml()
-    # test_sp_s2v.nn_model()
+    # decicsion_tree = test_sp_s2v.evaluate_with_ml()
+    
+    model = test_sp_s2v.k_cross_val()
+    num_cls = 1
+    y_pred = model.predict(test_sp_s2v.x_test_sp)
+    result = model.evaluate(test_sp_s2v.x_test_sp, test_sp_s2v.y_test_scalar)
+    print('test acc: {}'.format(result[1]))
+    fpr = dict()
+    tpr = dict()
+    roc_auc = dict()
+
+    fpr, tpr,_ = roc_curve(test_sp_s2v.y_test_scalar, y_pred)
+    roc_auc = auc(fpr, tpr)
+    plt.figure()
+    lw = 2
+
+    plt.plot(fpr, tpr, color='aqua', lw=lw, label='ROC curve of class {0} (area = {1:0.2f})'.format(1, roc_auc))
+    plt.plot([0, 1],[0, 1], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic example')
+    plt.legend(loc="lower right")
+    plt.show()
+    plt.savefig('roc_cure.png')
