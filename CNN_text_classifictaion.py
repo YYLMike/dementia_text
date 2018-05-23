@@ -123,10 +123,11 @@ def plot_roc_curve(y_test, y_pred, out_dir):
     plt.ylabel('True Positive Rate')
     plt.title('Receiver operating characteristic example')
     plt.legend(loc="lower right")
-    plt.savefig(out_dir+'roc_cure.png')
+    plot_path = os.path.join(out_dir, '..', 'roc_curve.png')
+    plt.savefig(plot_path)
 
 if __name__ == '__main__':
-    # Load data: x_train_pad, x_test_pad, y_train, y_test
+    ## Load data: x_train_pad, x_test_pad, y_train, y_test
     x_train, y_train = data_preprocess.read_sentence(
         DEMENTIA_TRAIN, CONTROL_TRAIN)
     y_train = data_preprocess.label_to_scalar(y_train)
@@ -140,18 +141,18 @@ if __name__ == '__main__':
         x_train_seg, x_test_seg)
     x_train_pad, x_test_pad = data_helper.pad_tokenize(
         x_train_tokens, x_test_tokens)
-    # Load pretrained model
+    ## Load pretrained model
     w2v_model, _, word_dict = data_preprocess.load_wordvec_model(W2V_MODEL)
     word_embedding = data_helper.embedding_matrix(word_dict, EMBEDDING_DIM)
 
-    # Create summaries directory for Tensorboard
+    ## Create summaries directory for Tensorboard
     timestamp = datetime.datetime.now().isoformat()
     out_dir = os.path.abspath(os.path.join(
         os.path.curdir, "runs_2", timestamp+message, "summaries"))
     tb = TensorBoard(log_dir=out_dir, histogram_freq=0,
                      write_graph=True, write_images=True)
 
-    # Train model
+    ## Train model
     # model, acc_avg = k_fold_cross_val(N_FOLDS)
     # save_dir = os.path.join(out_dir, "..", "CNN_text.h5")
     # model.save(save_dir)
@@ -161,18 +162,18 @@ if __name__ == '__main__':
     model = load_model('/home/yyliu/code/NLP/src/runs_2/2018-05-22T14:27:29.936183CNN_dropout/CNN_text.h5')
     model.summary()
     os.makedirs(out_dir)
-    # Test Model
+    ## Test Model
     result = model.evaluate(x_test_pad, y_test)
     print('Test set acc: {:.2%}'.format(result[1]))
     y_pred = model.predict(x=x_test_pad)
 
-    #Plot ROC curve
+    ## Plot ROC curve
     plot_roc_curve(y_test, y_pred, out_dir)
     
     # cls_pred = np.argmax(y_pred, axis=1)
     # cls_true = np.argmax(y_test, axis=1)
     
-    # Save prediction csv of test set
+    ## Save prediction csv of test set
     cls_pred = np.round(y_pred)
     cls_test = y_test
     predictions_human_readable = np.column_stack(
