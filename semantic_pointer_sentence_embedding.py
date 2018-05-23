@@ -1,5 +1,6 @@
 # import-module
-import sys
+import os
+import csv
 import matplotlib.pyplot as plt
 
 import jieba.posseg as pseg
@@ -15,33 +16,40 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 
-from tensorflow.python.keras import optimizers
+from tensorflow.python.keras import optimizers, regularizers
 from tensorflow.python.keras.layers import LSTM, Dense, Dropout
-from tensorflow.python.keras.models import Sequential
+from tensorflow.python.keras.models import Sequential, load_model
 from tensorflow.python.keras.preprocessing.sequence import pad_sequences
 from tensorflow.python.keras.preprocessing.text import Tokenizer
+
 from sklearn.metrics import roc_auc_score, auc, roc_curve
 from sklearn.cross_validation import StratifiedKFold
 
 import data_preprocess
 import tokenize_data_helper
 
+import h5py
+import pickle
+
 DIM = 500
 TRAIN_NUM_WORDS = 1000
+N_FOLDS = 10
+EPOCHS = 500
+BATHC_SIZE = 32
+DROPOUT_RATE = 0.5
 W2V_MODEL = '500features_20context_20mincount_zht'
 CONTROL_TRAIN = 'control.txt'
 DEMENTIA_TRAIN = 'dementia.txt'
 CONTROL_TEST = 'control_test.txt'
 DEMENTIA_TEST = 'dementia_test.txt'
-
+SP_VOCAB = 'runs_2/SP_500epochs_500dim/'
+TRAIN_MODEL = False
 
 class SP_sentence_embed:
 
     def __init__(self):
         self.w2v_model, _, self.w2v_dict = data_preprocess.load_wordvec_model(
             W2V_MODEL)
-        self.vocab = nengo.spa.Vocabulary(
-            DIM, max_similarity=0.3)  # optional max_similarity: 0.1
         self.load_data()
 
     def load_data(self):
@@ -53,7 +61,7 @@ class SP_sentence_embed:
 
         self.x_test, self.y_test = data_preprocess.read_sentence(
             DEMENTIA_TEST, CONTROL_TEST)
-        self.test_seg = data_preprocess.segmentation(self.x_test)
+        self.x_test_seg = data_preprocess.segmentation(self.x_test)
         self.x_test_seg_pos = data_preprocess.segmentation_postagger(
             self.x_test)
 
@@ -64,6 +72,8 @@ class SP_sentence_embed:
         self.y_test_scalar = data_preprocess.label_to_scalar(self.y_test)
 
     def vocab_create(self):
+        self.vocab = nengo.spa.Vocabulary(
+            DIM, max_similarity=0.3)  # optional max_similarity: 0.1
         self.oov = []
         for token, i in self.data_helper.tokenizer.word_index.items():
             try:
@@ -82,6 +92,8 @@ class SP_sentence_embed:
             len(self.data_helper.tokenizer.word_index.keys())))
         self.postag_falg_create()
         self.vocab_augment_postagger()
+        with open('vocab.pickle', 'wb') as f:
+            pickle.dump(self.vocab, f)
 
     def postag_falg_create(self):
         self.flag_dict = {}
@@ -94,13 +106,21 @@ class SP_sentence_embed:
         for i in self.flag_dict:
             self.vocab.parse(i.upper())
 
+    # Use pretrained semantic pointer vocab
+    def load_vocab(self, vocab_name):
+        with open(vocab_name, 'rb') as f:
+            self.vocab = pickle.load(f)
+    
     def sentence2sp(self, sentence_seg_pos):
         sentence_sp = None
         new_s = self.vocab['Start']
         for word, flag in sentence_seg_pos:
             new_token = self.vocab['V' + str(word)] * self.vocab[flag.upper()]
             new_s += new_token
-        sentence_sp = new_s.v/(len(sentence_seg_pos)+1)
+        new_s.normalize()# normalize with norm 2.
+        # sentence_sp = new_s.v/(len(sentence_seg_pos)+1)# basic normalize method
+        sentence_sp = new_s.v
+
         return sentence_sp
 
     def get_train_sentence_sp(self):
@@ -130,7 +150,7 @@ class SP_sentence_embed:
         scoring = ['f1_micro', 'accuracy']
         for i, n in zip(ml_method, ml_method_name):
             scores = cross_validate(
-                i, self.x_train_sp, self.y_train_scalar, cv=10, scoring=scoring, return_train_score=True)
+                i, self.x_train_sp, self.y_train_scalar, cv=N_FOLDS, scoring=scoring, return_train_score=True)
             for k in scores.keys():
                 print(str(n) + str(k) +
                       '\nscore: {}'.format(np.mean(scores[k])))
@@ -145,63 +165,115 @@ class SP_sentence_embed:
     def nn_model(self):
         model = Sequential()
         layer_dim = [250, 50, 1]  # 256 32 1
-        model.add(Dense(layer_dim[0], input_dim=DIM, activation='relu'))
-        model.add(Dropout(rate=0.8))
-        model.add(Dense(layer_dim[1], activation='relu'))
-        model.add(Dropout(rate=0.8))
+        model.add(Dropout(rate=DROPOUT_RATE, input_shape=(DIM,)))
+        model.add(Dense(layer_dim[0], activation='relu', kernel_regularizer=regularizers.l2(0.01)))
+        model.add(Dropout(rate=DROPOUT_RATE))
+        model.add(Dense(layer_dim[1], activation='relu', kernel_regularizer=regularizers.l2(0.01)))
+        model.add(Dropout(rate=DROPOUT_RATE))
         model.add(Dense(layer_dim[2], activation='sigmoid'))
         optimizer = optimizers.Adam()
         model.compile(optimizer=optimizer,
                       loss='binary_crossentropy', metrics=['accuracy'])
         return model
 
-    def k_cross_val(self):
+    def k_cross_val(self, n_folds):
 
-        skf = StratifiedKFold(self.y_train_scalar, n_folds=5, shuffle=True)
+        skf = StratifiedKFold(self.y_train_scalar, n_folds=n_folds, shuffle=True)
 
         best_model = None
         last_acc = 0
+        acc_avg = 0
         for i, (train, val) in enumerate(skf):
             print('Running fold: ', str(i+1))
             model = self.nn_model()
             model.fit(self.x_train_sp[train], self.y_train_scalar[train],
-                        epochs=30, batch_size=16, shuffle='True', verbose=2)
+                        epochs=EPOCHS, batch_size=BATHC_SIZE, shuffle='True', verbose=2)
             result = model.evaluate(
                 self.x_train_sp[val], self.y_train_scalar[val])
             print('Validation acc: {}'.format(result[1]))
             if result[1] > last_acc:
                 best_model = model
             last_acc = result[1]
-        return best_model
+            acc_avg += last_acc
+        acc_avg /= N_FOLDS
+        return best_model, acc_avg
 
+    def roc_curve(self, y_test, y_pred):
+        fpr = dict()
+        tpr = dict()
+        roc_auc = dict()
+
+        fpr, tpr, threshold = roc_curve(y_test, y_pred)
+        # print('threshold: ', threshold)
+        roc_auc = auc(fpr, tpr)
+        plt.figure()
+        lw = 2
+
+        plt.plot(fpr, tpr, color='aqua', lw=lw, label='ROC curve of class {0} (area = {1:0.2f})'.format(1, roc_auc))
+        plt.plot([0, 1],[0, 1], color='navy', lw=lw, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver operating characteristic example')
+        plt.legend(loc="lower right")
+        plt.show()
+        # plt.savefig('roc_curve.png')
+
+    def create_prediction_csv(self, y_pred):
+        cls_pred = np.round(y_pred)
+        predictions_human_readable = np.column_stack(
+        (np.array(self.x_test_seg), cls_pred, self.y_test_scalar))
+        out_path = os.path.join(SP_VOCAB, "prediction.csv")
+        print("Saving evaluation to {0}".format(out_path))
+        with open(out_path, 'w') as f:
+            csv.writer(f).writerows(predictions_human_readable)
+
+    # Online demo, predict keyboard input sentences
+    def online_demo(self):
+        while(True):
+            sentence = []
+            s = input('say something ... ')
+            if s=='bye':
+                break
+            sentence.append(s)
+            sentence = np.array(sentence)
+            print(sentence)
+            sentence_seg_pos = data_preprocess.segmentation_postagger(sentence)
+            print(sentence_seg_pos[0])
+            sp = np.zeros((1,DIM))
+            sp[0] = self.sentence2sp(sentence_seg_pos[0])
+            predict = model.predict(sp)
+            predict_cls = np.round(predict)
+            print('\n', predict_cls)
+        
 if __name__ == '__main__':
     test_sp_s2v = SP_sentence_embed()
-    test_sp_s2v.vocab_create()
+    
+    if TRAIN_MODEL:
+        test_sp_s2v.vocab_create()
+    else:
+        test_sp_s2v.load_vocab(SP_VOCAB + 'vocab.pickle')
+    
     test_sp_s2v.get_train_sentence_sp()
     test_sp_s2v.get_test_sentnece_sp()
+    ## Use basic ml mehtod
     # decicsion_tree = test_sp_s2v.evaluate_with_ml()
-    
-    model = test_sp_s2v.k_cross_val()
+
+    ## Train model
+    if TRAIN_MODEL:
+        model, val_acc_avg = test_sp_s2v.k_cross_val(N_FOLDS)
+        model.save('sp_30epochs_500dim.h5')
+        print('{0} fold cross validation acc: {1:.2f}'.format(N_FOLDS, val_acc_avg))
+    ## Use restore model 
+    else:
+        model = load_model(SP_VOCAB + 'sp_30epochs_500dim.h5')
     num_cls = 1
     y_pred = model.predict(test_sp_s2v.x_test_sp)
     result = model.evaluate(test_sp_s2v.x_test_sp, test_sp_s2v.y_test_scalar)
-    print('test acc: {}'.format(result[1]))
-    fpr = dict()
-    tpr = dict()
-    roc_auc = dict()
+    print('test acc: {:.2f}'.format(result[1]))
 
-    fpr, tpr,_ = roc_curve(test_sp_s2v.y_test_scalar, y_pred)
-    roc_auc = auc(fpr, tpr)
-    plt.figure()
-    lw = 2
-
-    plt.plot(fpr, tpr, color='aqua', lw=lw, label='ROC curve of class {0} (area = {1:0.2f})'.format(1, roc_auc))
-    plt.plot([0, 1],[0, 1], color='navy', lw=lw, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver operating characteristic example')
-    plt.legend(loc="lower right")
-    plt.show()
-    plt.savefig('roc_cure.png')
+    test_sp_s2v.roc_curve(test_sp_s2v.y_test_scalar, y_pred)
+    # test_sp_s2v.create_prediction_csv(y_pred)
+    # test_sp_s2v.online_demo()
+    
