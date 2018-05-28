@@ -56,12 +56,26 @@ class Semantic_analysis:
         self.paragraph_vec.append(vector)
         return vector
 
+    # save time for analysis, since ckip online cost times
+    def generate_sv_avg_ckip(self, sentence):
+        exclude = set(string.punctuation + '，'+'。'+'、'+'「'+'」'+'？'+'！')
+        vector = np.zeros((WV_DIIM))
+        oov_num = 0
+        sentence = [t for t in sentence if not t in exclude]
+        for token in sentence:
+            if token in self.w2v_model.wv.vocab:
+                vector += self.w2v_model[token]
+            else:
+                oov_num += 1
+        vector /= len(sentence)
+        self.paragraph_vec.append(vector)
+
     def write_sentence_vec_avg_dict(self, sentence_dict, file_name=None):
         sv_dict = {}
         oov_dict = {}
         sentence_token_dict = {}
         for key, sentence in sentence_dict.items():
-            sv, oov, sentence_token = generate_sentence_vec_avg(sentence, 'tw', w2v_model)
+            sv, oov, sentence_token = self.generate_sentence_vec_avg(sentence, 'tw', w2v_model)
             sv_dict[key] = sv
             oov_dict[key] = oov
             sentence_token_dict[key] = sentence_token

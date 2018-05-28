@@ -30,11 +30,12 @@ DEMENTIA_NUM = 51
 CONTROL_NUM = 51
 DATA_NUM = DEMENTIA_NUM + CONTROL_NUM
 FEATURE_TYPE = ['Syntactic', 'Semantic', 'Syntactic_Semantic']
-
+CKIP_POS = '../pickle/ckip_AD_control_pos_score.pickle'
+CKIP_SENTENCE_SEG = '../pickle/ckip_AD_control_seg.pickle'
 
 class Cluster:
 
-    def __init__(self):
+    def __init__(self, model_name=MODEL_NAME):
         self.sentence_dict = {}
         self.kmeans_cluster = []
         self.pca_labels = []
@@ -42,7 +43,7 @@ class Cluster:
         self.postag_cls = syntactic_extract.Postag_analysis()
         self.syntactic_feature = []
         # use semantic_extract module
-        self.paragraph_vec = semantic_extract.Semantic_analysis(MODEL_NAME)
+        self.paragraph_vec = semantic_extract.Semantic_analysis(model_name)
         self.semantic_feature = []
         # load the textual data
         self.load_sentence_dict()
@@ -61,15 +62,29 @@ class Cluster:
             self.syntactic_feature = self.postag_cls.syntactic_features_ckip.copy()
         print('Syntactic features has extracted ...')
     
+    # save time for analysis, since ckip online cost times
+    def syntactic_ckip_load(self):
+        with open(CKIP_POS, 'rb') as f:
+            self.syntactic_feature = pickle.load(f)
+        print('Syntactic features using ckip has extracted ...')
+
     def write_syntactic_feature(self, file_name):
         with open(file_name, 'wb') as f:
             pickle.dump(self.syntactic_feature, f)
         print('Write syntactic features success...')
 
     def semantic_analysis(self, segment_tool='jieba'):
-        for key, s in self.sentence_dict.items():
-            self.paragraph_vec.generate_sentence_vec_avg(s, 's')
-        self.semantic_feature = self.paragraph_vec.paragraph_vec.copy()
+        if segment_tool=='jieba':
+            for key, s in self.sentence_dict.items():
+                self.paragraph_vec.generate_sentence_vec_avg(s, 's')
+            self.semantic_feature = self.paragraph_vec.paragraph_vec.copy()
+        # save time for analysis, since ckip online cost times, using pre-segment ckip sentences
+        elif segment_tool=='ckip':
+            with open(CKIP_SENTENCE_SEG, 'rb') as f:
+                sentences = pickle.load(f)
+            for i in sentences:
+                self.paragraph_vec.generate_sv_avg_ckip(i)
+            self.semantic_feature = self.paragraph_vec.paragraph_vec.copy()
         print('Semantic features has extracted ...')
 
     def k_mean_cluster(self, feature_mode='Syntactic'): # 0: syntactuc, 1: semantic, 2: both
@@ -132,7 +147,7 @@ class Cluster:
 
         return accuracy, result_dict
 
-    def plot_cluster(self):
+    def plot_cluster(self, title_name=None):
         plt.figure()
         # kmeans, score_2d = self.k_mean_cluster()
         for i in range(0, self.pca_labels.shape[0]):
@@ -141,8 +156,8 @@ class Cluster:
             if self.kmeans_cluster.labels_[i]==1:
                 c2 = plt.scatter(self.pca_labels[i, 0], self.pca_labels[i, 1], c='b', marker='.')
         plt.legend([c1, c2], ['dementia', 'control'])
-        plt.title('K mean cluster')
-        plt.show()
+        plt.title('K mean cluster'+title_name)
+        plt.savefig(title_name+'.png')
 
     def predict_sentence(self, sentence):
         score = np.array(self.pos_tag_analysis(sentence))
