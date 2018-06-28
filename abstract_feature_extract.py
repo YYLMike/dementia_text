@@ -14,7 +14,7 @@ DEMENTIA_NUM = 51
 CONTROL_NUM = 51
 WV_DIIM = 500
 
-class Semantic_analysis:
+class Abstract_feature_extract:
 
 
     def __init__(self, file_name):

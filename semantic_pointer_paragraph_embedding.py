@@ -59,22 +59,22 @@ class SP_sentence_embed:
     def load_data(self):
         # self.x_train, self.y_train = data_preprocess.read_sentence(
         #     DEMENTIA_TRAIN, CONTROL_TRAIN)
-        self.x_train, self.y_train = data_preprocess.read_sentence(DEMENTIA_TOTAL, CONTROL_TOTAL)
+        self.x_train, self.y_train = data_preprocess.read_paragraph(DEMENTIA_TRAIN, CONTROL_TRAIN)
         self.x_train_seg = data_preprocess.segmentation(self.x_train)
         self.x_train_seg_pos = data_preprocess.segmentation_postagger(
             self.x_train)
 
-        # self.x_test, self.y_test = data_preprocess.read_sentence(
-        #     DEMENTIA_TEST, CONTROL_TEST)
-        # self.x_test_seg = data_preprocess.segmentation(self.x_test)
-        # self.x_test_seg_pos = data_preprocess.segmentation_postagger(
-        #     self.x_test)
+        self.x_test, self.y_test = data_preprocess.read_paragraph(
+            DEMENTIA_TEST, CONTROL_TEST)
+        self.x_test_seg = data_preprocess.segmentation(self.x_test)
+        self.x_test_seg_pos = data_preprocess.segmentation_postagger(
+            self.x_test)
 
         # self.data_helper = tokenize_data_helper.tokenize_data_helper(
         #     self.x_train_seg, TRAIN_NUM_WORDS)
         self.data_helper = tokenize_data_helper.tokenize_data_helper(self.x_train_seg, TRAIN_NUM_WORDS)
         self.y_train_scalar = data_preprocess.label_to_scalar(self.y_train)
-        # self.y_test_scalar = data_preprocess.label_to_scalar(self.y_test)s
+        self.y_test_scalar = data_preprocess.label_to_scalar(self.y_test)
 
     def vocab_create(self):
         self.vocab = nengo.spa.Vocabulary(
@@ -97,7 +97,8 @@ class SP_sentence_embed:
             len(self.data_helper.tokenizer.word_index.keys())))
         self.postag_flag_create()
         self.vocab_augment_postagger()
-        with open('vocab.pickle', 'wb') as f:
+        vocab_path = os.path.join(out_dir, '..', 'vocab.pickle')
+        with open(vocab_path, 'wb') as f:
             pickle.dump(self.vocab, f, protocol=2)
 
     def postag_flag_create(self):
@@ -120,7 +121,7 @@ class SP_sentence_embed:
         sentence_sp = None
         new_s = self.vocab['Start']
         for word, flag in sentence_seg_pos:
-            new_token = self.vocab['V' + str(word)] * self.vocab[flag.upper()]
+            new_token = self.vocab['V' + word] * self.vocab[flag.upper()]
             new_s += new_token
         new_s.normalize()# normalize with norm 2.
         # sentence_sp = new_s.v/(len(sentence_seg_pos)+1)# basic normalize method
@@ -259,6 +260,13 @@ class SP_sentence_embed:
     
         
 if __name__ == '__main__':
+    timestamp = datetime.datetime.now().isoformat()
+    global out_dir
+    out_dir = os.path.abspath(os.path.join(
+        os.path.curdir, "runs_2", timestamp+message, "summaries"))
+    os.makedirs(out_dir)
+    tb = TensorBoard(log_dir=out_dir, histogram_freq=0,
+                     write_graph=True, write_images=True)
     test_sp_s2v = SP_sentence_embed()
     
     if TRAIN_MODEL:
@@ -267,31 +275,31 @@ if __name__ == '__main__':
         test_sp_s2v.load_vocab(SP_VOCAB + 'vocab.pickle')
     
     test_sp_s2v.get_train_sentence_sp()
-    # test_sp_s2v.get_test_sentnece_sp()
+    test_sp_s2v.get_test_sentnece_sp()
     ## Use basic ml mehtod
-    decicsion_tree = test_sp_s2v.evaluate_with_ml()
+    # decicsion_tree = test_sp_s2v.evaluate_with_ml()
     ######
-    # timestamp = datetime.datetime.now().isoformat()
-    # global out_dir
-    # out_dir = os.path.abspath(os.path.join(
-    #     os.path.curdir, "runs_2", timestamp+message, "summaries"))
-    # tb = TensorBoard(log_dir=out_dir, histogram_freq=0,
-    #                  write_graph=True, write_images=True)
-    # ## Train model
+
+    ## Train model
     # if TRAIN_MODEL:
     #     model, val_acc_avg = test_sp_s2v.k_cross_val(N_FOLDS, tb)
     #     model.save('sp_30epochs_500dim.h5', include_optimizer=False)
     #     print('{0} fold cross validation acc: {1:.2f}'.format(N_FOLDS, val_acc_avg))
+    if TRAIN_MODEL:
+        model = test_sp_s2v.nn_model()
+        model.fit(test_sp_s2v.x_train_sp, test_sp_s2v.y_train_scalar, epochs=EPOCHS, batch_size=BATHC_SIZE, shuffle='True', verbose=2, callbacks=[tb])
+        model_path = os.path.join(out_dir,'..', 'sp_30epochs_500dim.h5')
+        model.save(model_path, include_optimizer=False)
     #######
     # ## Use restore model 
     # else:
     #     model = load_model(SP_VOCAB + 'sp_30epochs_500dim.h5')
-    # num_cls = 1
-    # y_pred = model.predict(test_sp_s2v.x_test_sp)
-    # result = model.evaluate(test_sp_s2v.x_test_sp, test_sp_s2v.y_test_scalar)
-    # print('test acc: {:.2f}'.format(result[1]))
+    num_cls = 1
+    y_pred = model.predict(test_sp_s2v.x_test_sp)
+    result = model.evaluate(test_sp_s2v.x_test_sp, test_sp_s2v.y_test_scalar)
+    print('test acc: {:.2f}'.format(result[1]))
 
-    # test_sp_s2v.roc_curve(test_sp_s2v.y_test_scalar, y_pred)
-    # test_sp_s2v.create_prediction_csv(y_pred)
+    test_sp_s2v.plot_roc_curve(test_sp_s2v.y_test_scalar, y_pred)
+    test_sp_s2v.create_prediction_csv(y_pred)
     # test_sp_s2v.online_demo()
     

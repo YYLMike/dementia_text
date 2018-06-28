@@ -14,17 +14,28 @@ class tokenize_data_helper():
         self.tokenizer = Tokenizer(num_words=num_words)
         self.tokenizer.fit_on_texts(fit_data)
         return self.tokenizer
+        
+    # with training and testing set
+    def tokenize_data(self, x_train, x_test=None):
+        if x_test:
+            return self.tokenizer.texts_to_sequences(x_train), self.tokenizer.texts_to_sequences(x_test)
+        return self.tokenizer.texts_to_sequences(x_train)
 
-    def tokenize_data(self, x_train, x_test):
-        return self.tokenizer.texts_to_sequences(x_train), self.tokenizer.texts_to_sequences(x_test)
-
-    def pad_tokenize(self, x_train_tokens, x_test_tokens, pad='post'):
-        num_tokens = [len(tokens) for tokens in x_train_tokens+x_test_tokens]
+    # with training and testing set
+    def pad_tokenize(self, x_train_tokens, x_test_tokens=None, pad='post', maxlen=None):
+        if x_test_tokens:
+            num_tokens = [len(tokens) for tokens in x_train_tokens+x_test_tokens]
+        else:
+            num_tokens = [len(tokens) for tokens in x_train_tokens]
         global max_tokens
         max_tokens = np.max(num_tokens)
+        if maxlen:
+            max_tokens = maxlen
         x_train_pad = pad_sequences(x_train_tokens, maxlen=max_tokens, padding=pad, truncating=pad)
-        x_test_pad = pad_sequences(x_test_tokens, maxlen=max_tokens, padding=pad, truncating=pad)
-        return x_train_pad, x_test_pad
+        if x_test_tokens:
+            x_test_pad = pad_sequences(x_test_tokens, maxlen=max_tokens, padding=pad, truncating=pad)
+            return x_train_pad, x_test_pad
+        return x_train_pad
 
     def tokens_to_string(self, tokens):
         words = [self.inverse_map[token] for token in tokens if token != 0]

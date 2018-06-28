@@ -17,8 +17,8 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 
 # Custumer module for feature extraction
-import syntactic_extract
-import semantic_extract
+import prior_feature_extract
+import abstract_feature_extract
 # File path
 SENTENCE_DICT = "../pickle/sentence_dict.pickle"
 WORDVEC_MODEL = "../w2v_model/"
@@ -29,7 +29,7 @@ SENTENCE_WV = "../pickle/"
 DEMENTIA_NUM = 51
 CONTROL_NUM = 51
 DATA_NUM = DEMENTIA_NUM + CONTROL_NUM
-FEATURE_TYPE = ['Syntactic', 'Semantic', 'Syntactic_Semantic']
+FEATURE_TYPE = ['Syntactic', 'Semantic', 'Syntactic_Prior_Semantic']
 CKIP_POS = '../pickle/ckip_AD_control_pos_score.pickle'
 CKIP_SENTENCE_SEG = '../pickle/ckip_AD_control_seg.pickle'
 
@@ -40,10 +40,11 @@ class Cluster:
         self.kmeans_cluster = []
         self.pca_labels = []
         # use syntactic_extract module
-        self.postag_cls = syntactic_extract.Postag_analysis()
+        self.prior_f_cls = prior_feature_extract.Prior_feature_extract()
         self.syntactic_feature = []
+        self.prior_semantic_feature = []
         # use semantic_extract module
-        self.paragraph_vec = semantic_extract.Semantic_analysis(model_name)
+        self.paragraph_vec = abstract_feature_extract.Abstract_feature_extract(model_name)
         self.semantic_feature = []
         # load the textual data
         self.load_sentence_dict()
@@ -55,24 +56,30 @@ class Cluster:
 
     def syntactic_analysis(self, segment_tool='jieba'):
         for key, s in self.sentence_dict.items():
-            self.postag_cls.pos_tag_analysis(s, segment_tool)
+            self.prior_f_cls.pos_tag_analysis(s, segment_tool)
         if segment_tool=='jieba':
-            self.syntactic_feature = self.postag_cls.syntactic_features_jieba.copy()
+            self.syntactic_feature = self.prior_f_cls.syntactic_features_jieba.copy()
         elif segment_tool=='ckip':
-            self.syntactic_feature = self.postag_cls.syntactic_features_ckip.copy()
-        print('Syntactic features has extracted ...')
+            self.syntactic_feature = self.prior_f_cls.syntactic_features_ckip.copy()
+        print('Syntactic analysis ok ...')
     
     # save time for analysis, since ckip online cost times
     def syntactic_ckip_load(self):
         with open(CKIP_POS, 'rb') as f:
-            self.syntactic_feature = pickle.load(f)
+            preprocess_ckip_feature = pickle.load(f)
+        for i in range(len(preprocess_ckip_feature)):
+            self.syntactic_feature.append(preprocess_ckip_feature[i][:4])
         print('Syntactic features using ckip has extracted ...')
-
-    def write_syntactic_feature(self, file_name):
-        with open(file_name, 'wb') as f:
-            pickle.dump(self.syntactic_feature, f)
-        print('Write syntactic features success...')
-
+    
+    def prior_semantic_analysis(self, segment_tool='jieba'):
+        for key, s in self.sentence_dict.items():
+            self.prior_f_cls.lexical_rich_analysis(s, segment_tool)
+        if segment_tool=='jieba':
+            self.prior_semantic_feature = self.prior_f_cls.semantic_features_jieab.copy()
+        elif segment_tool=='ckip':
+            self.prior_semantic_feature = self.prior_f_cls.semantic_features_ckip.copy()
+        print('Prior semantic analysis ok ...')
+    
     def semantic_analysis(self, segment_tool='jieba'):
         if segment_tool=='jieba':
             for key, s in self.sentence_dict.items():
@@ -102,7 +109,7 @@ class Cluster:
         
         elif feature_mode==FEATURE_TYPE[2]:
             syntactic_f = np.array(self.syntactic_feature)
-            semantic_f = self.semantic_feature
+            semantic_f = self.prior_semantic_feature
             score = np.concatenate((syntactic_f, semantic_f), axis=1)
             kmeans = KMeans(n_clusters=2, random_state=0).fit(score)
             pca = PCA(n_components=2).fit(score)
