@@ -43,27 +43,37 @@ def csv_to_txt(file_name):
 # read both dementia&control txt file into paragraph dictionary, size: 102
 
 
-def read_paragraph(file_name=None):
+def read_paragraph(file_name_ad=None, file_name_ctrl=None):
     paragraph = []
-    paragraph_dict = {}
-    with open(DEMENTIA_DATA, encoding='utf8') as f:
+    paragraph_list = []
+    with open(DEMENTIA_DATA+file_name_ad, encoding='utf8') as f:
         paragraph = f.readlines()
     for i in range(len(paragraph)):
         if i % 2 == 0:
-            paragraph_dict[paragraph[i].strip(
-                '\n')] = paragraph[i+1].strip('\n')
-    with open(CONTROL_DATA, encoding='utf8') as f:
+            paragraph_no_punctuation = ''
+            for char in paragraph[i+1].strip('\n'):
+                if not char in punctuation:
+                    paragraph_no_punctuation += char
+            paragraph_list.append(paragraph_no_punctuation)
+    dementia_num = len(paragraph_list)
+    with open(CONTROL_DATA+file_name_ctrl, encoding='utf8') as f:
         paragraph = f.readlines()
     for i in range(len(paragraph)):
         if i % 2 == 0:
-            paragraph_dict[paragraph[i].strip(
-                '\n')] = paragraph[i+1].strip('\n')
-    if file_name:
-        with open(file_name, 'wb') as f:
-            pickle.dump(paragraph_dict, f)
-    print(len(paragraph_dict))
-    print('read_paragraph done ...')
-    return paragraph_dict
+            paragraph_no_punctuation = ''
+            for char in paragraph[i+1].strip('\n'):
+                if not char in punctuation:
+                    paragraph_no_punctuation += char
+            paragraph_list.append(paragraph_no_punctuation)
+
+    train_data = np.array(paragraph_list)
+    dementia_labels = [[0, 1] for _ in train_data[:dementia_num]]
+    control_labels = [[1, 0] for _ in train_data[dementia_num:]]
+    train_labels = np.concatenate([dementia_labels, control_labels], 0)
+    print('total number of train set: {}'.format(train_data.shape[0]))
+    print('sentence number of dementia subject: {}'.format(len(dementia_labels)))
+    print('sentence number of control normal subject: {}'.format(len(control_labels)))
+    return train_data, train_labels
 
 # r read both dementia&control txt file into sentence list, size: 873
 
