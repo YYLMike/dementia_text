@@ -46,26 +46,39 @@ def csv_to_txt(file_name):
 def read_paragraph(file_name_ad=None, file_name_ctrl=None):
     paragraph = []
     paragraph_list = []
+    sentence_num = []
     with open(DEMENTIA_DATA+file_name_ad, encoding='utf8') as f:
         paragraph = f.readlines()
     for i in range(len(paragraph)):
         if i % 2 == 0:
+            tmp_sentence_num = 0
             paragraph_no_punctuation = ''
             for char in paragraph[i+1].strip('\n'):
                 if not char in punctuation:
                     paragraph_no_punctuation += char
+                else:
+                    tmp_sentence_num += 1
+            sentence_num.append(tmp_sentence_num)
             paragraph_list.append(paragraph_no_punctuation)
     dementia_num = len(paragraph_list)
     with open(CONTROL_DATA+file_name_ctrl, encoding='utf8') as f:
         paragraph = f.readlines()
+    
     for i in range(len(paragraph)):
         if i % 2 == 0:
+            tmp_sentence_num = 0
             paragraph_no_punctuation = ''
             for char in paragraph[i+1].strip('\n'):
                 if not char in punctuation:
                     paragraph_no_punctuation += char
+                else:
+                    tmp_sentence_num += 1
+            sentence_num.append(tmp_sentence_num)
             paragraph_list.append(paragraph_no_punctuation)
-
+    # with open('sentence_num.txt', 'w') as f:
+    #     for i in sentence_num:
+    #         f.write(str(i))
+    #         f.write('\n')
     train_data = np.array(paragraph_list)
     dementia_labels = [[0, 1] for _ in train_data[:dementia_num]]
     control_labels = [[1, 0] for _ in train_data[dementia_num:]]
