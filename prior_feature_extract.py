@@ -48,15 +48,16 @@ class Prior_feature_extract:
                 tmp_a += 1
             elif flag in pronoun_set:
                 tmp_r += 1
-
+        repetitive_words = (tmp_token - len(word_type))/len(word_type)
+        ttr = len(word_type)/tmp_token
         if segment_tool == 'jieba':
             self.syntactic_features_jieba.append(
-                [tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token])
+                [tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token, repetitive_words, ttr, tmp_token])
         elif segment_tool == 'ckip':
             self.syntactic_features_ckip.append(
-                [tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token])
+                [tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token, repetitive_words, ttr, tmp_token])
 
-        return [tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token]
+        return [tmp_n/tmp_token, tmp_v/tmp_token, tmp_a/tmp_token, tmp_r/tmp_token, repetitive_words, tmp_token]
 
     def lexical_rich_analysis(self, sentence, segment_tool):
         tmp_token = 0.0

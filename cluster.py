@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import sys
 import pickle
-
+import csv
 # Machine learning Tools
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
@@ -62,7 +62,17 @@ class Cluster:
         elif segment_tool=='ckip':
             self.syntactic_feature = self.prior_f_cls.syntactic_features_ckip.copy()
         print('Syntactic analysis ok ...')
-    
+
+    def write_syntactic_feature(self, file_name):
+        file = open(file_name, "w", encoding='utf8')
+        
+        for i in range(len(self.syntactic_feature)):
+            for j in self.syntactic_feature[i]:
+                file.write(str(j) + ',')
+            file.write('\n')
+        file.close()
+        print('Write syntactic features success...')
+
     # save time for analysis, since ckip online cost times
     def syntactic_ckip_load(self):
         with open(CKIP_POS, 'rb') as f:
