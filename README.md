@@ -1,9 +1,5 @@
 # Dementia
 
-git push https://github.com/YYLMike/dementia_text.git
-User name: YYLMike
-User pwd: lkklkk123
-
 file list: wikiXMLtoTXT.py, train_word2vec_model.py, data_preprocess.py, tokenize_data_helper.py,               syntactic_extract.py, semantic_extract.py, semantic_pointer_sentence_embedding.py,                   cluster.py, test_cluster.py, 
            CNN_text_classification.py
 
